@@ -1,17 +1,17 @@
 # Global Ban Bot
 
-Discord-Bot für ein zentrales globales Bann-Netzwerk (discord.js v14, PostgreSQL/Prisma, Express-API). Wenn ein berechtigter Nutzer `/globalban` ausführt, wird der Account auf allen verbundenen Servern gebannt – sofern der Bot dort die Ban-Berechtigung hat.
+Discord-Bot für ein zentrales globales Bann-Netzwerk (**Python 3.11+**, discord.py, PostgreSQL/SQLAlchemy, FastAPI). Wenn ein berechtigter Nutzer `/globalban` ausführt, wird der Account auf allen verbundenen Servern gebannt – sofern der Bot dort die Ban-Berechtigung hat.
 
 ## Voraussetzungen
 
-- Node.js 20 oder neuer
+- Python 3.11 oder neuer
 - Docker (für PostgreSQL) **oder** eine eigene PostgreSQL-Instanz
 - Eine Discord-Application mit Bot unter [Discord Developer Portal](https://discord.com/developers/applications)
 
 ## Discord-App vorbereiten
 
 1. Application anlegen, Bot erstellen, Token kopieren.
-2. Unter **Bot** die Intent **Server Members Intent** ist für Ban-by-ID nicht zwingend. **Message Content** wird nicht benötigt.
+2. **Message Content Intent** wird nicht benötigt. Ban per User-ID funktioniert ohne Members Intent.
 3. Invite-URL (OAuth2 → URL Generator):
    - Scopes: `bot`, `applications.commands`
    - Bot Permissions: `Ban Members`, `View Channels`, `Send Messages`, `Embed Links`
@@ -22,8 +22,27 @@ Discord-Bot für ein zentrales globales Bann-Netzwerk (discord.js v14, PostgreSQ
 ```bash
 git clone <repo-url>
 cd globalbanbot
-cp .env.example .env
+python -m venv .venv
 ```
+
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+```bash
+pip install -r requirements.txt
+copy .env.example .env
+```
+
+(Unter Linux/macOS: `cp .env.example .env`.)
 
 `.env` ausfüllen (`DISCORD_TOKEN`, `CLIENT_ID`, `BOT_OWNER_ID`, `API_KEY`, `DATABASE_URL`).
 
@@ -33,25 +52,10 @@ PostgreSQL starten:
 docker compose up -d
 ```
 
-Abhängigkeiten und Datenbank:
+Bot und API starten (Tabellen werden beim ersten Start automatisch angelegt):
 
 ```bash
-npm install
-npx prisma migrate deploy
-npx prisma generate
-```
-
-Entwicklung:
-
-```bash
-npm run dev
-```
-
-Produktion:
-
-```bash
-npm run build
-npm start
+python -m app
 ```
 
 Die API lauscht standardmäßig auf `http://localhost:3000`. Healthcheck ohne Key: `GET /health`.
@@ -74,7 +78,7 @@ Discord-Administrator-Rechte allein reichen **nicht** für globale Bans – das 
 ## Datenmodell (kurz)
 
 - **Guild** – Server, Netzwerk-Flag, Log-Kanal, ob Mods bannen dürfen
-- **GlobalBan** – ein Datensatz pro User-ID, `isActive`
+- **GlobalBan** – ein Datensatz pro User-ID, `is_active`
 - **Staff** – `ADMIN` / `MOD` pro Guild
 - **BanAction** – Ergebnis pro Guild (SUCCESS / FAILED / SKIPPED)
 
@@ -87,9 +91,9 @@ Alle Routen unter `API_PREFIX` (Default `/api/v1`) erfordern Header `X-API-Key: 
 | GET | `/api/v1/stats` | Guild- und Ban-Zähler |
 | GET | `/api/v1/guilds` | Registrierte Server (ohne Secrets) |
 | GET | `/api/v1/bans?active=true&limit=50&cursor=` | Ban-Liste, Cursor-Pagination |
-| GET | `/api/v1/bans/:userId` | Detail inkl. BanActions |
-| POST | `/api/v1/bans` | Body `{ "userId", "reason" }` – handelt als Bot-Owner |
-| DELETE | `/api/v1/bans/:userId` | Global Unban |
+| GET | `/api/v1/bans/{user_id}` | Detail inkl. BanActions |
+| POST | `/api/v1/bans` | Body `{ "userId": "...", "reason": "..." }` – handelt als Bot-Owner |
+| DELETE | `/api/v1/bans/{user_id}` | Global Unban |
 
 Beispiel:
 
@@ -99,16 +103,6 @@ curl -H "X-API-Key: $API_KEY" http://localhost:3000/api/v1/stats
 
 Schreibende API-Aufrufe nutzen intern denselben Ban-Service wie die Slash-Commands (Queue mit `BAN_CONCURRENCY`).
 
-## Skripte
-
-| Script | Zweck |
-| --- | --- |
-| `npm run dev` | tsx watch |
-| `npm run build` / `npm start` | Kompilieren und starten |
-| `npm run db:migrate` | Prisma migrate (Entwicklung) |
-| `npm run db:deploy` | Migrationen auf bestehender DB |
-| `npm run db:studio` | Prisma Studio |
-
 ## Hinweise zur Skalierung
 
-Globale Bans laufen mit begrenzter Parallelität (`BAN_CONCURRENCY`, Standard 5), damit Discord-Rate-Limits und Slash-Command-Antwortzeiten eingehalten werden. Sharding ist in v1 nicht enthalten; der Ban-Service arbeitet über `client.guilds.cache` und kann später hinter einem ShardingManager liegen.
+Globale Bans laufen mit begrenzter Parallelität (`BAN_CONCURRENCY`, Standard 5), damit Discord-Rate-Limits eingehalten werden. Sharding ist in v1 nicht enthalten.
