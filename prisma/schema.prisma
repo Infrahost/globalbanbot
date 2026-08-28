@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  ADMIN
+  MOD
+}
+
+enum BanActionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model Guild {
+  id                   String   @id
+  name                 String
+  ownerId              String
+  isConnectedToNetwork Boolean  @default(false)
+  logChannelId         String?
+  modCanExecuteBan     Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  staff      Staff[]
+  banActions BanAction[]
+
+  @@index([isConnectedToNetwork])
+}
+
+model GlobalBan {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  bannedBy  String
+  reason    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  actions BanAction[]
+
+  @@index([isActive])
+}
+
+model Staff {
+  id        String    @id @default(cuid())
+  userId    String
+  guildId   String
+  role      StaffRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, guildId])
+  @@index([guildId])
+}
+
+model BanAction {
+  id          String           @id @default(cuid())
+  globalBanId String
+  guildId     String
+  status      BanActionStatus
+  error       String?
+  createdAt   DateTime         @default(now())
+
+  globalBan GlobalBan @relation(fields: [globalBanId], references: [id], onDelete: Cascade)
+  guild     Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([globalBanId])
+  @@index([guildId])
+  @@index([status])
+}
